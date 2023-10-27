@@ -3,6 +3,19 @@ const btnSearch = document.querySelector(`#btn-search`);
 const inputSearch = document.querySelector(`#pokemon`);
 const clearBtn = document.querySelector(`#btn-clear`);
 const pokemonCard = document.querySelector(`#pokemon-card`);
+const btnEvolution = document.querySelector(`#btn-evolution`);
+let contEvolutions = 1;
+
+btnEvolution.addEventListener("click", async (event) => {
+  let evolution = event.target
+    .getAttribute("class")
+    .split("poke-")
+    .pop()
+    .trim()
+    .split(",");
+  let nextEvolution = evolution.shift().trim();
+  await evolutionPokemon(nextEvolution, evolution);
+});
 
 // Lógica para limpiar el botón de búsqueda
 clearBtn.addEventListener("click", () => {
@@ -23,7 +36,7 @@ btnSearch.addEventListener(`click`, async (event) => {
     const pokemonData = await getPokemon(pokemonName);
 
     // Verificamos si puede evolucionar
-    const evolutionName = await validateEvolution(pokemonData.id);
+    let evolutionName = await validateEvolution(pokemonData.id);
 
     const pokemon = {
       name: pokemonData.name,
@@ -37,7 +50,8 @@ btnSearch.addEventListener(`click`, async (event) => {
     };
     generatePokemonCard(pokemon);
   } catch (error) {
-    throw new Error(`Error al consultar los datos del pokemos: ${pokemonName}`);
+    alert(`No se ha encontrado el pokemon: ${pokemonName}`);
+    throw new Error(`Error al consultar los datos del pokemon: ${pokemonName}`);
   }
 });
 
@@ -55,10 +69,15 @@ const generatePokemonCard = ({
   skills,
   evolution,
 }) => {
-  const btnEvolution = document.querySelector(`#btn-evolution`);
-  if (evolution === name) {
+  if (evolution == name || evolution == "") {
     btnEvolution.classList.add("hidden");
+    btnEvolution.classList.forEach((classValue) => {
+      if (classValue.includes("poke")) {
+        btnEvolution.classList.remove(classValue);
+      }
+    });
   } else {
+    btnEvolution.classList.add(`poke-${evolution}`);
     btnEvolution.classList.remove("hidden");
   }
 
@@ -81,7 +100,6 @@ const generatePokemonCard = ({
   )}`;
 
   pokemonCard.classList.remove("hidden");
-  console.log(name, sprite, description, moves, skills, evolution);
 };
 
 const validateEvolution = async (pokemonId) => {
@@ -91,14 +109,53 @@ const validateEvolution = async (pokemonId) => {
     );
     const data = await resp.json();
     const evolutionUrl = data.evolution_chain.url;
-
     const respEvolution = await fetch(evolutionUrl);
     const dataEvolution = await respEvolution.json();
-    // Retornamos el nombre de la evolución para comparar posteriormente si es el mismo pokemon
-    return dataEvolution.chain.species.name;
+
+    // si no existe el array de evoluciones retornamos unicamente el nombre del pokemon
+    if (dataEvolution.chain.evolves_to.length === 0) {
+      const evolutionArray = [dataEvolution.chain.species.name];
+      return evolutionArray;
+    }
+
+    // array de posibles evoluciones
+    if (dataEvolution.chain.evolves_to.length === 1) {
+      const evolutionArray = [
+        dataEvolution.chain.evolves_to[0].evolves_to[0].species.name,
+      ];
+      return evolutionArray;
+    }
+    const evolutionArray = dataEvolution.chain.evolves_to.map(
+      (evolution) => evolution.species.name
+    );
+    //aliminamos el primer elemento del array
+    return evolutionArray;
   } catch (error) {
     throw new Error(
       `Error al consultar la evolución del pokemon: ${pokemonId}`
     );
+  }
+};
+
+const evolutionPokemon = async (pokemonName, evolutions) => {
+  try {
+    const envolvedPokemon = await getPokemon(pokemonName);
+
+    // Verificamos si puede evolucionar nuevamente
+    // let evolutionName = await validateEvolution(envolvedPokemon.id);
+    const pokemon = {
+      name: envolvedPokemon.name,
+      sprite: envolvedPokemon.sprites.front_default,
+      description: `${envolvedPokemon.name} es un pokemon de tipo '${envolvedPokemon.types[0].type.name}'`,
+      moves: envolvedPokemon.moves.map((move) => move.move.name).splice(0, 5), //tomamos solo 5 movimientos.
+      skills: envolvedPokemon.stats.map(
+        (skill) => `${skill.stat.name}: ${skill.base_stat}`
+      ),
+      evolution: evolutions,
+    };
+
+    generatePokemonCard(pokemon);
+  } catch (error) {
+    throw new Error(`Error al consultar los datos del pokemon: ${pokemonName}`);
   }
 };
